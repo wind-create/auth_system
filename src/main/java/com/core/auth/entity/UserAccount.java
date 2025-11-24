@@ -38,4 +38,10 @@ public class UserAccount {
 
     @Column(name = "email_verified_at")
     private OffsetDateTime emailVerifiedAt;
+
+    @Column(name = "auth_state_version")
+    private Integer authStateVersion;
+
+    @Column(name = "auth_state_changed_at")
+    private OffsetDateTime authStateChangedAt;
 }

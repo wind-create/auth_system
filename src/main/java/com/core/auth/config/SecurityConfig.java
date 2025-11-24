@@ -63,7 +63,7 @@ public class SecurityConfig {
                         "/auth/password/request",
                         "/auth/password/confirm"
                 ).permitAll()
-                .requestMatchers("/_diag/**").permitAll() 
+                .requestMatchers("/api-keys/**").authenticated() 
                 .requestMatchers("/admin/**").hasAuthority("role.manage")
                 .requestMatchers("/merchant/**").authenticated()
                 .requestMatchers("/me/**").authenticated()

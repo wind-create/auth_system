@@ -27,6 +27,8 @@ public class PasswordResetService {
   private final SessionRepository sessionRepo;
   private final PasswordEncoder passwordEncoder;
   private final MailPort mailPort;
+  private final AuthService authStateService;
+
 
   @Value("${auth.password-reset-ttl-minutes:30}")
   private long ttlMinutes;
@@ -101,5 +103,7 @@ public class PasswordResetService {
       s.setRevokedAt(OffsetDateTime.now(ZoneOffset.UTC));
     }
     sessionRepo.saveAll(actives);
+
+    authStateService.bump(user.getId());
   }
 }

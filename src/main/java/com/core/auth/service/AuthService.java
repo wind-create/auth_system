@@ -6,6 +6,8 @@ import com.core.auth.entity.SessionStatus;
 import com.core.auth.entity.UserAccount;
 import com.core.auth.repo.SessionRepository;
 import com.core.auth.repo.UserAccountRepository;
+
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,6 +35,11 @@ public class AuthService {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Base64.Encoder B64URL_ENCODER = Base64.getUrlEncoder().withoutPadding();
+
+    @Transactional
+    public void bump(UUID userId) {
+        userRepo.bumpAuthStateVersion(userId);
+    }
 
     private static String normalizeEmail(String email) {
         return email == null ? null : email.trim().toLowerCase();
@@ -113,7 +120,8 @@ public class AuthService {
         List<UUID> merchantIds = p.merchantIds();
 
         // T4: generate access token dengan perms & merchant_ids
-        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), perms, merchantIds);
+        Integer asv = userRepo.findAuthStateVersionById(user.getId());
+        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), perms, merchantIds, asv);
 
         return new TokenPairResponse(accessToken, refreshToken);
     }
@@ -148,7 +156,8 @@ public class AuthService {
         List<UUID> merchantIds = p.merchantIds();
 
         // T4: access baru + refresh baru (rotating)
-        String newAccess = jwtService.generateAccessToken(se.getUserId(), null, perms, merchantIds);
+        Integer asv2 = userRepo.findAuthStateVersionById(se.getUserId());
+        String newAccess = jwtService.generateAccessToken(se.getUserId(), null, perms, merchantIds, asv2);
         String newRefresh = buildRefreshToken(se.getId(), newSecret);
 
         return new TokenPairResponse(newAccess, newRefresh);

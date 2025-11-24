@@ -38,38 +38,52 @@ public class JwtService {
     this.accessTtlMinutes = accessTtlMinutes;
   }
 
-  /** Generate access token HS256 + claim perms & email (opsional). */
-  public String generateAccessToken(UUID userId, String emailOrNull, List<String> permCodes, List<UUID> merchantIds) {
+  // Di JwtService
+  /** Generate access token HS256 + claim perms/email (opsional) + merchant_ids + asv. */
+  public String generateAccessToken(
+      UUID userId,
+      String emailOrNull,
+      List<String> permCodes,
+      List<UUID> merchantIds,
+      int asv
+  ) {
     Instant now = Instant.now();
     Instant exp = now.plusSeconds(accessTtlMinutes * 60L);
-
-    var builder = new JWTClaimsSet.Builder()
+  
+    JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder()
         .issuer(issuer)
         .issueTime(Date.from(now))
         .expirationTime(Date.from(exp))
         .subject(userId.toString())
-        .jwtID(UUID.randomUUID().toString());
-
-    if (emailOrNull != null) builder.claim("email", emailOrNull);
-    if (permCodes != null && !permCodes.isEmpty()) builder.claim("perms", permCodes);
+        .jwtID(UUID.randomUUID().toString())
+        .claim("asv", asv); // <-- tetap chaining, baris ini bagian dari builder
+  
+    if (emailOrNull != null && !emailOrNull.isBlank()) {
+      builder.claim("email", emailOrNull);
+    }
+    if (permCodes != null && !permCodes.isEmpty()) {
+      builder.claim("perms", permCodes);
+    }
     if (merchantIds != null && !merchantIds.isEmpty()) {
-    builder.claim("merchant_ids", merchantIds.stream().map(UUID::toString).toList());
-  }
-
+      builder.claim("merchant_ids",
+          merchantIds.stream().map(UUID::toString).toList());
+    }
+  
     JWTClaimsSet claims = builder.build();
-
+  
     JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.HS256)
         .type(JOSEObjectType.JWT) // opsional
         .build();
-
+  
     try {
       SignedJWT jwt = new SignedJWT(header, claims);
-      jwt.sign(new MACSigner(hmacSecret));
+      jwt.sign(new MACSigner(hmacSecret)); // pastikan secret >= 32 bytes
       return jwt.serialize();
     } catch (Exception e) {
       throw new RuntimeException("Failed to sign JWT", e);
     }
   }
+
 
   /** Verifikasi signature + expiry (+ issuer) dan kembalikan claims. */
   public JWTClaimsSet validateAndGetClaims(String token) {
