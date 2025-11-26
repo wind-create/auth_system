@@ -46,6 +46,20 @@
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
 
+    <dependency>
+      <groupId>com.eatthepath</groupId>
+      <artifactId>java-otp</artifactId>
+      <version>0.4.0</version>
+    </dependency>
+
+     <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-devtools</artifactId>
+        <scope>runtime</scope>
+        <optional>true</optional>
+    </dependency>
+
+
     <!-- JPA + Postgres + Flyway -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
