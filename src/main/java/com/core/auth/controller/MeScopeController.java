@@ -1,7 +1,12 @@
 package com.core.auth.controller;
 
-import com.core.auth.dto.api.ApiResponse;          // pakai envelope kamu
-import com.core.auth.security.AuthPrincipal;       // principal Tahap 4
+import com.core.auth.dto.api.ApiResponse;
+import com.core.auth.security.AuthPrincipal;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -13,8 +18,14 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/me")
+@Tag(name = "Me", description = "Informasi token & scope user saat ini")
+@SecurityRequirement(name = "bearerAuth")
 public class MeScopeController {
 
+  @Operation(
+      summary = "Lihat scope token saat ini",
+      description = "Mengembalikan userId, merchantIds, dan daftar permission yang ada di JWT aktif."
+  )
   @GetMapping("/scope")
   public ResponseEntity<ApiResponse<Map<String,Object>>> scope() {
     Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -23,7 +34,6 @@ public class MeScopeController {
           .body(ApiResponse.error("unauthorized", "Not authenticated", auth));
     }
 
-    // ambil userId & merchantIds dari AuthPrincipal (Tahap 4)
     UUID userId;
     List<UUID> merchantIds = List.of();
     Object principal = auth.getPrincipal();
@@ -31,11 +41,9 @@ public class MeScopeController {
       userId = ap.getUserId();
       merchantIds = ap.getMerchantIds();
     } else {
-      // fallback (kalau filter belum Tahap 4)
       userId = UUID.fromString(String.valueOf(principal));
     }
 
-    // daftar permission (authorities) yang ada di token saat ini
     List<String> perms = auth.getAuthorities().stream()
         .map(GrantedAuthority::getAuthority)
         .sorted()

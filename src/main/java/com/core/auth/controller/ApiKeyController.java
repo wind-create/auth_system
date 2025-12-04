@@ -6,6 +6,12 @@ import com.core.auth.dto.apikey.ApiKeyCreateResponse;
 import com.core.auth.dto.apikey.ApiKeyRevokeRequest;
 import com.core.auth.dto.apikey.ApiKeyView;
 import com.core.auth.service.ApiKeyService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,14 +25,16 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api-keys")
+@Tag(name = "API Keys", description = "Manajemen API key (merchant-scoped)")
+@SecurityRequirement(name = "bearerAuth")
 public class ApiKeyController {
 
   private final ApiKeyService apiKeyService;
 
-  /**
-   * Create API key baru untuk merchant tertentu.
-   * Auth: JWT user + hasAuthority('api_key.manage')
-   */
+  @Operation(
+      summary = "Buat API key baru",
+      description = "Membuat API key baru untuk merchant tertentu. Full key hanya muncul sekali di response."
+  )
   @PostMapping
   @PreAuthorize("hasAuthority('api_key.manage')")
   public ResponseEntity<ApiResponse<ApiKeyCreateResponse>> create(
@@ -36,38 +44,40 @@ public class ApiKeyController {
     return ResponseEntity.ok(ApiResponse.success(data));
   }
 
-  /**
-   * List API key untuk satu merchant.
-   * Contoh: GET /api-keys?merchantId=...
-   */
+  @Operation(
+      summary = "List API key per merchant",
+      description = "Menampilkan semua API key milik satu merchant (tanpa full secret)."
+  )
   @GetMapping
   @PreAuthorize("hasAuthority('api_key.manage')")
   public ResponseEntity<ApiResponse<List<ApiKeyView>>> listByMerchant(
-      @RequestParam UUID merchantId
+      @Parameter(description = "ID merchant") @RequestParam UUID merchantId
   ) {
     List<ApiKeyView> items = apiKeyService.listByMerchant(merchantId);
     return ResponseEntity.ok(ApiResponse.success(items));
   }
 
-  /**
-   * Detail satu API key (tanpa full secret).
-   */
+  @Operation(
+      summary = "Detail 1 API key",
+      description = "Menampilkan metadata sebuah API key tanpa full secret."
+  )
   @GetMapping("/{id}")
   @PreAuthorize("hasAuthority('api_key.manage')")
   public ResponseEntity<ApiResponse<ApiKeyView>> getOne(
-      @PathVariable UUID id
+      @Parameter(description = "ID API key") @PathVariable UUID id
   ) {
     ApiKeyView view = apiKeyService.getOne(id);
     return ResponseEntity.ok(ApiResponse.success(view));
   }
 
-  /**
-   * Revoke (nonaktifkan) API key.
-   */
+  @Operation(
+      summary = "Revoke API key",
+      description = "Menandai API key sebagai nonaktif (active=false, revoked_at diisi)."
+  )
   @PostMapping("/{id}/revoke")
   @PreAuthorize("hasAuthority('api_key.manage')")
   public ResponseEntity<ApiResponse<Map<String, Object>>> revoke(
-      @PathVariable UUID id,
+      @Parameter(description = "ID API key") @PathVariable UUID id,
       @Valid @RequestBody(required = false) ApiKeyRevokeRequest req
   ) {
     apiKeyService.revoke(id, req != null ? req.reason() : null);

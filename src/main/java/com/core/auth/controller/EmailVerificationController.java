@@ -4,6 +4,10 @@ import com.core.auth.dto.api.ApiResponse;
 import com.core.auth.entity.UserAccount;
 import com.core.auth.repo.UserAccountRepository;
 import com.core.auth.service.EmailVerificationService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -14,11 +18,16 @@ import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
+@Tag(name = "Email Verification", description = "Request & konfirmasi email verification")
 public class EmailVerificationController {
 
   private final EmailVerificationService service;
   private final UserAccountRepository userRepo;
 
+  @Operation(
+      summary = "Request email verification",
+      description = "Kalau sudah login, pakai email dari user saat ini. Kalau belum login, body boleh berisi {\"email\":\"...\"}."
+  )
   @PostMapping("/auth/verification/email/request")
   public ResponseEntity<ApiResponse<Map<String, Boolean>>> requestVerification(
       Authentication auth,
@@ -37,6 +46,7 @@ public class EmailVerificationController {
     return ResponseEntity.ok(ApiResponse.success(Map.of("ok", true)));
   }
 
+  @Operation(summary = "Konfirmasi email verification")
   @PostMapping("/auth/verification/email/confirm")
   public ResponseEntity<ApiResponse<Map<String, Boolean>>> confirm(@RequestBody Map<String,String> body) {
     String token = body.get("token");

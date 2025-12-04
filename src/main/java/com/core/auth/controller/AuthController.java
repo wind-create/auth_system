@@ -4,6 +4,10 @@ import com.core.auth.dto.*;
 import com.core.auth.dto.api.ApiResponse;
 import com.core.auth.entity.UserAccount;
 import com.core.auth.service.AuthService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,30 +18,37 @@ import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
+@Tag(name = "Auth", description = "Register, login, refresh, logout, MFA login")
 public class AuthController {
 
   private final AuthService authService;
 
+  @Operation(summary = "Register user baru")
   @PostMapping("/auth/register")
   public ResponseEntity<ApiResponse<Map<String, Object>>> register(@Valid @RequestBody RegisterRequest req) {
     UserAccount ua = authService.register(req.getEmail(), req.getPassword(), req.getFullName());
     return ResponseEntity.ok(ApiResponse.success(Map.of("id", ua.getId())));
   }
 
-  // ==== LOGIN STEP 1: password ====
+  @Operation(
+      summary = "Login step 1 (password)",
+      description = "Login dengan email & password. Kalau user wajib MFA TOTP, response akan berisi status NEED_MFA_TOTP."
+  )
   @PostMapping("/auth/login")
-public ResponseEntity<ApiResponse<LoginResponse>> login(
-    @Valid @RequestBody LoginRequest req,
-    HttpServletRequest http
-) {
-  String ip = http.getRemoteAddr();
-  String ua = http.getHeader("User-Agent");
-  LoginResponse result = authService.login(req.getEmail(), req.getPassword(), ip, ua);
-  return ResponseEntity.ok(ApiResponse.success(result));
-}
+  public ResponseEntity<ApiResponse<LoginResponse>> login(
+      @Valid @RequestBody LoginRequest req,
+      HttpServletRequest http
+  ) {
+    String ip = http.getRemoteAddr();
+    String ua = http.getHeader("User-Agent");
+    LoginResponse result = authService.login(req.getEmail(), req.getPassword(), ip, ua);
+    return ResponseEntity.ok(ApiResponse.success(result));
+  }
 
-
-  // ==== LOGIN STEP 2 (MFA TOTP) ====
+  @Operation(
+      summary = "Login step 2 (MFA TOTP)",
+      description = "Verifikasi TOTP untuk login yang membutuhkan MFA. Mengembalikan access + refresh token."
+  )
   @PostMapping("/auth/login/totp")
   public ResponseEntity<ApiResponse<TokenPairResponse>> loginTotp(
       @Valid @RequestBody LoginTotpRequest req,
@@ -49,6 +60,7 @@ public ResponseEntity<ApiResponse<LoginResponse>> login(
     return ResponseEntity.ok(ApiResponse.success(tokens));
   }
 
+  @Operation(summary = "Refresh token (rotating refresh token)")
   @PostMapping("/auth/refresh")
   public ResponseEntity<ApiResponse<TokenPairResponse>> refresh(
       @Valid @RequestBody RefreshRequest req,
@@ -60,6 +72,7 @@ public ResponseEntity<ApiResponse<LoginResponse>> login(
     return ResponseEntity.ok(ApiResponse.success(tokens));
   }
 
+  @Operation(summary = "Logout (revoke 1 refresh token)")
   @PostMapping("/auth/logout")
   public ResponseEntity<ApiResponse<Map<String, Boolean>>> logout(
       @Valid @RequestBody LogoutRequest req
