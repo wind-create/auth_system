@@ -22,4 +22,7 @@ public class TotpProperties {
 
   /** Period TOTP dalam detik (umumnya 30). */
   private int periodSeconds = 30;
+
+  /** TTL untuk loginToken MFA (detik) */
+  private long loginTokenTtlSeconds = 300;
 }

@@ -35,6 +35,8 @@ public class TotpService {
   private final UserSecuritySettingRepository secRepo;
   private final TotpCredentialRepository credRepo;
 
+  
+
   // ------------ helper ------------
   private UUID currentUserId() {
     Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -54,94 +56,163 @@ public class TotpService {
     }
   }
 
+  @Transactional(readOnly = true)
+public String getCurrentCodeForDebug(UUID credentialId) throws Exception {
+  ensureEnabled(); // cek feature flag
+
+  // UUID userId = currentUserId();
+
+  TotpCredential cred = credRepo.findById(credentialId)
+      .orElseThrow(() -> new IllegalArgumentException("TOTP credential not found"));
+
+  // jaga-jaga: credential harus milik user yg lagi login
+  // if (!cred.getUser().getId().equals(userId)) {
+  //   throw new IllegalStateException("Credential not owned by current user");
+  // }
+
+  // pakai secret yang sama dengan yang dipakai untuk verify
+  return generateCurrentCode(cred.getSecretEnc());
+}
+
+// helper baru
+private String generateCurrentCode(String secretBase64) throws Exception {
+  TimeBasedOneTimePasswordGenerator totp =
+      new TimeBasedOneTimePasswordGenerator(
+          Duration.ofSeconds(totpProps.getPeriodSeconds()),
+          totpProps.getDigits()
+      );
+
+  byte[] secretBytes = Base64.getDecoder().decode(secretBase64);
+  javax.crypto.spec.SecretKeySpec key =
+      new javax.crypto.spec.SecretKeySpec(secretBytes, "HmacSHA1");
+
+  Instant now = Instant.now();
+  int code = totp.generateOneTimePassword(key, now);
+
+  return String.format("%0" + totpProps.getDigits() + "d", code); // jadi "012345"
+}
+
+
   // ------------ public API ------------
 
-  @Transactional
-  public TotpEnrollResponse enrollForCurrentUser() throws Exception {
-    ensureEnabled();
+ @Transactional
+public TotpEnrollResponse enrollForCurrentUser() throws Exception {
+  ensureEnabled();
 
-    UUID userId = currentUserId();
-    UserAccount user = userRepo.findById(userId)
-        .orElseThrow(() -> new IllegalArgumentException("User not found"));
+  UUID userId = currentUserId();
+  UserAccount user = userRepo.findById(userId)
+      .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-    // generate random secret key (20 bytes recommended)
-    KeyGenerator keyGenerator = KeyGenerator.getInstance("HmacSHA1");
-    keyGenerator.init(160); // 160-bit key (20 bytes)
-    SecretKey secretKey = keyGenerator.generateKey();
+  // 1) Cek apakah sudah ada credential aktif
+  var existingOpt = credRepo.findByUser_IdAndActiveTrue(userId);
+  if (existingOpt.isPresent()) {
+    TotpCredential existing = existingOpt.get();
 
-    // encode ke Base32 (otp-java expect Key; tapi untuk otpauthUri, biasanya pakai base32)
-    byte[] secretBytes = secretKey.getEncoded();
-    String secretBase32 = Base64.getEncoder().encodeToString(secretBytes); // NOTE: utk real, pakai Base32 lib (mis. apache commons)
-    // untuk demo, kita pakai Base64 dulu. Nanti bisa ganti ke Base32 sebenarnya.
-
-    String issuer = totpProps.getIssuer();
-    String accountName = user.getEmail(); // atau username lain
-
-    String label = URLEncoder.encode(issuer + ":" + accountName, StandardCharsets.UTF_8);
-    String issuerParam = URLEncoder.encode(issuer, StandardCharsets.UTF_8);
-    String secretParam = URLEncoder.encode(secretBase32, StandardCharsets.UTF_8);
-
-    String otpauthUri =
-        "otpauth://totp/" + label +
-        "?secret=" + secretParam +
-        "&issuer=" + issuerParam +
-        "&digits=" + totpProps.getDigits() +
-        "&period=" + totpProps.getPeriodSeconds();
-
-    // simpan credential (secretEnc bisa di-encrypt, untuk sekarang simpan apa adanya)
-    TotpCredential cred = TotpCredential.builder()
-        .user(user)
-        .secretEnc(secretBase32)
-        .issuer(issuer)
-        .accountName(accountName)
-        .createdAt(Instant.now())
-        .active(true)
-        .build();
-
-    credRepo.save(cred);
-
-    return new TotpEnrollResponse(
-        cred.getId(),
-        secretBase32,
-        otpauthUri
-    );
-  }
-
-  @Transactional
-  public void confirmEnrollForCurrentUser(TotpConfirmRequest req) throws Exception {
-    ensureEnabled();
-
-    UUID userId = currentUserId();
-
-    TotpCredential cred = credRepo.findById(req.credentialId())
-        .orElseThrow(() -> new IllegalArgumentException("TOTP credential not found"));
-
-    if (!cred.getUser().getId().equals(userId)) {
-      throw new IllegalStateException("Credential not owned by current user");
+    // Kalau belum pernah dikonfirmasi (verifiedAt null) -> reuse saja
+    if (existing.getVerifiedAt() == null) {
+      String otpauthUri = buildOtpauthUri(
+          existing.getSecretEnc(),
+          existing.getIssuer(),
+          existing.getAccountName()
+      );
+      return new TotpEnrollResponse(
+          existing.getId(),
+          existing.getSecretEnc(),
+          otpauthUri
+      );
     }
 
-    // verify TOTP code
-    if (!verifyCode(cred.getSecretEnc(), req.code())) {
-      throw new IllegalArgumentException("Invalid TOTP code");
-    }
-
-    cred.setVerifiedAt(Instant.now());
-    credRepo.save(cred);
-
-    // enable MFA flag di user_security_setting
-    UserSecuritySetting setting = secRepo.findById(userId)
-        .orElse(UserSecuritySetting.builder()
-            .userId(userId)
-            .user(cred.getUser())
-            .build());
-
-    setting.setMfaTotpEnabled(true);
-    setting.setMfaUpdatedAt(Instant.now());
-    secRepo.save(setting);
-
-    // BONUS: bump ASV supaya semua token lama invalid
-    userRepo.bumpAuthStateVersion(userId);
+    // Kalau sudah verified -> anggap TOTP sudah aktif, jangan buat lagi
+    throw new IllegalStateException("TOTP already enabled. Disable it first before enroll again.");
   }
+
+  // 2) Tidak ada credential aktif -> buat baru
+  // --- generate secret baru ---
+  KeyGenerator keyGenerator = KeyGenerator.getInstance("HmacSHA1");
+  keyGenerator.init(160); // 160-bit key (20 bytes)
+  SecretKey secretKey = keyGenerator.generateKey();
+
+  byte[] secretBytes = secretKey.getEncoded();
+  String secretBase64 = Base64.getEncoder().encodeToString(secretBytes);
+
+  String issuer = totpProps.getIssuer();
+  String accountName = user.getEmail();
+
+  String otpauthUri = buildOtpauthUri(secretBase64, issuer, accountName);
+
+  TotpCredential cred = TotpCredential.builder()
+      .user(user)
+      .secretEnc(secretBase64)
+      .issuer(issuer)
+      .accountName(accountName)
+      .createdAt(Instant.now())
+      .active(true)
+      .build();
+
+  credRepo.save(cred);
+
+  return new TotpEnrollResponse(
+      cred.getId(),
+      secretBase64,
+      otpauthUri
+  );
+}
+
+private String buildOtpauthUri(String secretBase64, String issuer, String accountName) {
+  String label = URLEncoder.encode(issuer + ":" + accountName, StandardCharsets.UTF_8);
+  String issuerParam = URLEncoder.encode(issuer, StandardCharsets.UTF_8);
+  String secretParam = URLEncoder.encode(secretBase64, StandardCharsets.UTF_8);
+
+  return "otpauth://totp/" + label +
+      "?secret=" + secretParam +
+      "&issuer=" + issuerParam +
+      "&digits=" + totpProps.getDigits() +
+      "&period=" + totpProps.getPeriodSeconds();
+}
+
+
+
+  @Transactional
+public void confirmEnrollForCurrentUser(TotpConfirmRequest req) throws Exception {
+  ensureEnabled();
+
+  UUID userId = currentUserId();
+
+  TotpCredential cred = credRepo.findById(req.credentialId())
+      .orElseThrow(() -> new IllegalArgumentException("TOTP credential not found"));
+
+  if (!cred.getUser().getId().equals(userId)) {
+    throw new IllegalStateException("Credential not owned by current user");
+  }
+
+  // 1) verify code
+  if (!verifyCode(cred.getSecretEnc(), req.code())) {
+    throw new IllegalArgumentException("Invalid TOTP code");
+  }
+
+  cred.setVerifiedAt(Instant.now());
+  // karena cred entity managed, tidak perlu save eksplisit untuk flush perubahan
+
+  // 2) upsert UserSecuritySetting
+  UserSecuritySetting setting = secRepo.findById(userId).orElse(null);
+
+  if (setting == null) {
+    // BELUM ADA row -> buat baru
+    setting = new UserSecuritySetting();
+    // kalau entity-mu pakai @OneToOne @MapsId ke UserAccount:
+    setting.setUser(cred.getUser()); // id akan ikut dari user
+    // JANGAN set id manual sebelum persist kalau pakai @MapsId
+  }
+
+  setting.setMfaTotpEnabled(true);
+  setting.setMfaUpdatedAt(Instant.now());
+
+  secRepo.save(setting);  // utk existing: merge, utk new: persist
+
+  // 3) bump ASV supaya semua access token lama invalid
+  userRepo.bumpAuthStateVersion(userId);
+}
+
 
   @Transactional
   public void disableForCurrentUser(String reason) {
@@ -186,4 +257,23 @@ public class TotpService {
     String expectedStr = String.format("%0" + totpProps.getDigits() + "d", expected);
     return expectedStr.equals(code);
   }
+
+  @Transactional
+public void verifyLoginCodeOrThrow(UUID userId, String code) throws Exception {
+  ensureEnabled();
+
+  TotpCredential cred = credRepo.findByUser_IdAndActiveTrue(userId)
+      .orElseThrow(() -> new IllegalStateException("TOTP credential not found"));
+
+  if (cred.getVerifiedAt() == null) {
+    throw new IllegalStateException("TOTP not verified");
+  }
+
+  if (!verifyCode(cred.getSecretEnc(), code)) {
+    throw new IllegalArgumentException("Invalid TOTP code");
+  }
+
+  cred.setLastUsedAt(Instant.now());
+}
+
 }

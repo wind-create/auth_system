@@ -20,4 +20,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     @Modifying
     @Query("update UserAccount u set u.authStateVersion = u.authStateVersion + 1, u.authStateChangedAt = CURRENT_TIMESTAMP where u.id = :id")
     void bumpAuthStateVersion(@Param("id") UUID id);
+
+
+    
 }
