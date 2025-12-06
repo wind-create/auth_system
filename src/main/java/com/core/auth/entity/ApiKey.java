@@ -37,6 +37,9 @@ public class ApiKey {
   @Column(name = "merchant_id")
   private UUID merchantId;
 
+  @Column(name = "application_id")
+  private UUID applicationId;
+
   // ⬇⬇⬇ PENTING: JSONB <-> List<String>
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "scopes", columnDefinition = "jsonb", nullable = false)

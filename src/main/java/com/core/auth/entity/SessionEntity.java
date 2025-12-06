@@ -34,6 +34,9 @@ public class SessionEntity {
     @Column(name = "user_agent")
     private String userAgent;
 
+    @Column(name = "application_id")
+    private UUID applicationId;
+
     @Column(name = "last_rotated_at", nullable = false)
     private OffsetDateTime lastRotatedAt;
 

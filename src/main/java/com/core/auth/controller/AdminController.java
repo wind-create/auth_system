@@ -22,13 +22,13 @@ public class AdminController {
 
   private final SessionAdminService sessionAdminService;
 
-  @Operation(summary = "List roles (dummy)", description = "Dummy endpoint untuk uji akses admin / role.manage")
-  @GetMapping("/roles")
-  public ResponseEntity<ApiResponse<Map<String,Object>>> list() {
-    return ResponseEntity.ok(ApiResponse.success(Map.of(
-        "items", List.of(Map.of("code","admin"), Map.of("code","basic_user"))
-    )));
-  }
+  // @Operation(summary = "List roles (dummy)", description = "Dummy endpoint untuk uji akses admin / role.manage")
+  // @GetMapping("/roles")
+  // public ResponseEntity<ApiResponse<Map<String,Object>>> list() {
+  //   return ResponseEntity.ok(ApiResponse.success(Map.of(
+  //       "items", List.of(Map.of("code","admin"), Map.of("code","basic_user"))
+  //   )));
+  // }
 
   @Operation(
       summary = "Logout semua sesi user",

@@ -2,46 +2,58 @@ package com.core.auth.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+@Entity
+@Table(name = "user_account")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Entity
-@Table(name = "user_account")
 public class UserAccount {
 
-    @Id
-    @Column(name = "id", nullable = false)
-    private UUID id = UUID.randomUUID();
+  @Id
+  @GeneratedValue(strategy = GenerationType.AUTO)
+  @Column(name = "id", nullable = false, updatable = false)
+  private UUID id;
 
-    @Column(name = "email", nullable = false)
-    private String email;
+  @Column(nullable = false)
+  private String email;
 
-    @Column(name = "email_normalized", insertable = false, updatable = false)
-    private String emailNormalized;
+  // generated ALWAYS AS (lower(trim(email))) di DB
+  @Column(name = "email_normalized", insertable = false, updatable = false)
+  private String emailNormalized;
 
-    @Column(name = "password_hash", nullable = false)
-    private String passwordHash;
+  @Column(name = "password_hash", nullable = false)
+  private String passwordHash;
 
-    @Column(name = "full_name")
-    private String fullName;
+  @Column(name = "full_name")
+  private String fullName;
 
-    @Column(name = "created_at", insertable = false, updatable = false)
-    private OffsetDateTime createdAt;
+  @Column(name = "email_verified_at")
+  private OffsetDateTime emailVerifiedAt;
 
-    @Column(name = "updated_at", insertable = false, updatable = false)
-    private OffsetDateTime updatedAt;
+  // 🔐 DIBIARKAN DB YG NGATUR (DEFAULT 0 + function bump_auth_state_version)
+  @Column(name = "auth_state_version",
+          nullable = false,
+          insertable = false,
+          updatable = false)
+  private Integer authStateVersion;
 
-    @Column(name = "email_verified_at")
-    private OffsetDateTime emailVerifiedAt;
+  @Column(name = "auth_state_changed_at",
+          nullable = false,
+          insertable = false,
+          updatable = false)
+  private Instant authStateChangedAt;
 
-    @Column(name = "auth_state_version")
-    private Integer authStateVersion;
+  // kalau mau, created_at / updated_at juga di-handle trigger di DB
+  @Column(name = "created_at", insertable = false, updatable = false)
+  private Instant createdAt;
 
-    @Column(name = "auth_state_changed_at")
-    private OffsetDateTime authStateChangedAt;
+  @Column(name = "updated_at", insertable = false, updatable = false)
+  private Instant updatedAt;
 }

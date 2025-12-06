@@ -32,7 +32,12 @@ public class AuthController {
 
   @Operation(
       summary = "Login step 1 (password)",
-      description = "Login dengan email & password. Kalau user wajib MFA TOTP, response akan berisi status NEED_MFA_TOTP."
+      description = """
+          Login dengan email & password.
+          - Jika user TIDAK butuh MFA TOTP → langsung kembalikan accessToken & refreshToken (loginStatus = "OK").
+          - Jika user WAJIB MFA TOTP → kembalikan loginToken (loginStatus = "NEED_MFA_TOTP").
+          Field appCode optional: contoh "MINIPSP", "JASTIP", "AUTH".
+          """
   )
   @PostMapping("/auth/login")
   public ResponseEntity<ApiResponse<LoginResponse>> login(
@@ -41,13 +46,26 @@ public class AuthController {
   ) {
     String ip = http.getRemoteAddr();
     String ua = http.getHeader("User-Agent");
-    LoginResponse result = authService.login(req.getEmail(), req.getPassword(), ip, ua);
+
+    // ⬇️ Tahap 8: pass appCode ke AuthService
+    LoginResponse result = authService.login(
+        req.getEmail(),
+        req.getPassword(),
+        ip,
+        ua,
+        req.getAppCode()   // <-- multi-application
+    );
+
     return ResponseEntity.ok(ApiResponse.success(result));
   }
 
   @Operation(
       summary = "Login step 2 (MFA TOTP)",
-      description = "Verifikasi TOTP untuk login yang membutuhkan MFA. Mengembalikan access + refresh token."
+      description = """
+          Verifikasi TOTP untuk login yang membutuhkan MFA.
+          - Body harus berisi loginToken (dari step 1), code (6 digit), dan appCode yang sama.
+          - Jika sukses → mengembalikan accessToken & refreshToken.
+          """
   )
   @PostMapping("/auth/login/totp")
   public ResponseEntity<ApiResponse<TokenPairResponse>> loginTotp(
@@ -56,7 +74,10 @@ public class AuthController {
   ) throws Exception {
     String ip = http.getRemoteAddr();
     String ua = http.getHeader("User-Agent");
-    TokenPairResponse tokens = authService.loginWithTotp(req, ip, ua);
+
+    // ⬇️ Tahap 8: appCode ikut diteruskan
+    TokenPairResponse tokens = authService.loginWithTotp(req, ip, ua, req.appCode());
+
     return ResponseEntity.ok(ApiResponse.success(tokens));
   }
 

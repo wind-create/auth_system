@@ -9,6 +9,9 @@ import java.util.*;
 public interface RoleRepository extends JpaRepository<Role, java.util.UUID> {
   Optional<Role> findByCode(String code);
 
+  boolean existsByCode(String code);
+
+
   @Query("select r from Role r where r.code in :codes")
   List<Role> findAllByCodeIn(@Param("codes") Collection<String> codes);
 }

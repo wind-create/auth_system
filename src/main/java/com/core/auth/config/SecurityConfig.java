@@ -60,6 +60,7 @@ public class SecurityConfig {
                 auth.requestMatchers(
                     "/auth/register",
                     "/auth/login",
+                    "/auth/login/totp",
                     "/auth/refresh",
                     "/auth/logout",
                     "/auth/verification/email/request",

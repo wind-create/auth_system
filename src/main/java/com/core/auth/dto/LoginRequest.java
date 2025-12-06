@@ -23,4 +23,12 @@ public class LoginRequest {
     )
     @NotBlank
     private String password;
+
+
+    @Schema(
+        description = "App code",
+        example = "123"
+    )
+    @NotBlank
+    private String appCode; 
 }

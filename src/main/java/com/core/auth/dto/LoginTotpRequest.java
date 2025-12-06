@@ -20,5 +20,8 @@ public record LoginTotpRequest(
     )
     @NotBlank
     @Pattern(regexp = "\\d{6}", message = "TOTP code harus 6 digit")
-    String code
+    String code,
+
+
+    String appCode
 ) {}

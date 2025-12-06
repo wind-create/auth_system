@@ -1,7 +1,10 @@
 package com.core.auth.service;
 
 import com.core.auth.config.TotpProperties;
-import com.nimbusds.jose.*;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JOSEObjectType;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
@@ -27,8 +30,8 @@ public class JwtService {
       @Value("${auth.jwt.hs256-secret}") String secret,
       @Value("${auth.jwt.issuer:auth-service}") String issuer,
       @Value("${auth.jwt.access-ttl-minutes:10}") long accessTtlMinutes,
-      TotpProperties totpProps) {
-
+      TotpProperties totpProps
+  ) {
     this.hmacSecret = secret.getBytes(StandardCharsets.UTF_8);
     if (this.hmacSecret.length < 32) {
       throw new IllegalStateException("HS256 secret minimal 32 byte. Perbesar auth.jwt.hs256-secret.");
@@ -42,13 +45,17 @@ public class JwtService {
   //  Access Token (dipakai di Authorization: Bearer ...)
   // =========================================================
 
-  /** Generate access token HS256 + claim perms/email (opsional) + merchant_ids + asv. */
+  /**
+   * Versi baru (Tahap 8): Access token HS256 + claim perms/email (opsional)
+   * + merchant_ids + asv + appCode.
+   */
   public String generateAccessToken(
       UUID userId,
       String emailOrNull,
       List<String> permCodes,
       List<UUID> merchantIds,
-      int asv
+      int asv,
+      String appCode
   ) {
     Instant now = Instant.now();
     Instant exp = now.plusSeconds(accessTtlMinutes * 60L);
@@ -68,12 +75,34 @@ public class JwtService {
       builder.claim("perms", permCodes);
     }
     if (merchantIds != null && !merchantIds.isEmpty()) {
-      builder.claim("merchant_ids",
-          merchantIds.stream().map(UUID::toString).toList());
+      builder.claim(
+          "merchant_ids",
+          merchantIds.stream().map(UUID::toString).toList()
+      );
+    }
+    if (appCode != null && !appCode.isBlank()) {
+      String appUpper = appCode.toUpperCase();
+      builder.claim("app", appUpper);
+      // optional: jadikan juga audience
+      builder.audience(appUpper);
     }
 
     JWTClaimsSet claims = builder.build();
     return sign(claims);
+  }
+
+  /**
+   * Versi lama (tanpa appCode) — tetap disediakan untuk backward compatibility.
+   * Secara internal, memanggil versi baru dengan appCode = null.
+   */
+  public String generateAccessToken(
+      UUID userId,
+      String emailOrNull,
+      List<String> permCodes,
+      List<UUID> merchantIds,
+      int asv
+  ) {
+    return generateAccessToken(userId, emailOrNull, permCodes, merchantIds, asv, null);
   }
 
   /** Verifikasi signature + expiry (+ issuer) dan kembalikan claims. */
@@ -152,7 +181,7 @@ public class JwtService {
    * - signature OK
    * - tidak expired
    * - kind = MFA_TOTP_LOGIN
-   * Return: userId (UUID) dari subject
+   * Return: userId (UUID) dari subject.
    */
   public UUID validateMfaTotpLoginToken(String token) {
     JWTClaimsSet claims = validateAndGetClaims(token);
