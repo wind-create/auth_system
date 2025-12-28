@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
  * - Cek klaim "asv" vs auth_state_version di DB (revoke instan).
  * - Map claim "perms" -> GrantedAuthority.
  * - Ambil claim "merchant_ids" -> disimpan di AuthPrincipal buat ScopeGuard.
+ * - Ambil claim "sid" -> disimpan sebagai sessionId di AuthPrincipal.
  */
 @Component
 @RequiredArgsConstructor
@@ -48,6 +50,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
       @NonNull HttpServletResponse response,
       @NonNull FilterChain chain
   ) throws ServletException, IOException {
+
+    // ⬇⬇⬇ PENTING: IZINKAN PRE-FLIGHT CORS LEWAT TANPA CEK JWT
+    if (HttpMethod.OPTIONS.matches(request.getMethod())) {
+      chain.doFilter(request, response);
+      return;
+    }
 
     String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
@@ -73,7 +81,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
       int currentAsv = (dbAsv == null ? -999 : dbAsv);
 
       boolean matched = (tokenAsv == currentAsv);
-      log.debug("JWT ASV check user={} tokenAsv={} dbAsv={} matched={}", userId, tokenAsv, currentAsv, matched);
+      log.debug("JWT ASV check user={} tokenAsv={} dbAsv={} matched={}",
+          userId, tokenAsv, currentAsv, matched);
 
       if (!matched) {
         // Token dianggap revoked → jangan set Authentication
@@ -89,15 +98,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
       List<GrantedAuthority> authorities = (rawPerms == null)
           ? List.of()
           : rawPerms.stream()
-          .map(Object::toString)
-          .map(SimpleGrantedAuthority::new)
-          .collect(Collectors.toList());
+              .map(Object::toString)
+              .map(SimpleGrantedAuthority::new)
+              .collect(Collectors.toList());
 
       // 5) Ambil merchant_ids (opsional) -> List<UUID>
       List<UUID> merchantIds = extractUuidListClaim(claims.getClaim("merchant_ids"));
 
-      // 6) Principal sekarang menyimpan userId + merchantIds
-      AuthPrincipal principal = new AuthPrincipal(userId, merchantIds);
+      // 6) Ambil sessionId dari claim (misal "sid")
+      UUID sessionId = extractSessionId(claims);
+
+      // 7) Principal sekarang menyimpan userId + sessionId + merchantIds
+      AuthPrincipal principal = new AuthPrincipal(userId, sessionId, merchantIds);
 
       var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
       auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -137,6 +149,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     } catch (Exception ex) {
       log.warn("Invalid merchant_ids claim format: {}", ex.toString());
       return List.of();
+    }
+  }
+
+  /** Ambil sessionId dari claim JWT (misal "sid" atau "sessionId"). */
+  private UUID extractSessionId(JWTClaimsSet claims) {
+    Object sid = claims.getClaim("sid"); // ganti ke "sessionId" kalau claim-mu pakainya itu
+    if (sid == null) {
+      return null;
+    }
+    try {
+      return UUID.fromString(sid.toString());
+    } catch (Exception ex) {
+      log.warn("Invalid sid claim format: {}", sid);
+      return null;
     }
   }
 }

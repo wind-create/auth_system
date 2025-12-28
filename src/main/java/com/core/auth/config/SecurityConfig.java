@@ -31,6 +31,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            // pakai CorsConfigurationSource dari CorsConfig
+            .cors(cors -> {})
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
@@ -56,6 +58,9 @@ public class SecurityConfig {
             )
 
             .authorizeHttpRequests(auth -> {
+                // ⬇⬇⬇ BARIS PENTING: IZINKAN SEMUA PRE-FLIGHT OPTIONS
+                auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
+
                 // ===== PUBLIC AUTH =====
                 auth.requestMatchers(
                     "/auth/register",
@@ -119,7 +124,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration cfg) throws Exception {

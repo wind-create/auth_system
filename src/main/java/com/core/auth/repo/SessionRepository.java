@@ -23,4 +23,8 @@ public interface SessionRepository extends JpaRepository<SessionEntity, UUID> {
            "where s.userId = :userId and s.status = com.core.auth.entity.SessionStatus.active")
     void revokeAllActiveByUser(@Param("userId") UUID userId, @Param("now") OffsetDateTime now);
 
+
+    List<SessionEntity> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    Optional<SessionEntity> findByIdAndUserId(UUID id, UUID userId);
 }
